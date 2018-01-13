@@ -1,29 +1,103 @@
----title: "PredictionAssignment"
+---
+title: "Practical Machine Learning : Human Activity Recognition "
 author: "Jacob Paracka"
 date: "January 8, 2018"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+# Introduction
+The exercise aims to develop a prediction model which can recognize human activity of weight lifting and determine if some of the common mistakes are being made when performing the exercise.
+
+```{r loadlibraries}
 knitr::opts_chunk$set(echo = TRUE)
+##load required libraries 
+library(caret)
+library(knitr)
+library(rpart)
 ```
 
-## R Markdown
+# Download and prepare data
+```{r downloaddata}
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na.strings = c("NA",""))
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+validation <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na.strings = c("NA",""))
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
 ```
 
-## Including Plots
+# Exploratory data analysis 
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r explpratoryanalysis}
+dim(training)
+##head(training)
+nrow(training[training$new_window=='yes',])
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+On observing the data we can already eliminate some of the fields that are not relevant for the prediction. Columns user_name, Timestamps and num_window are not relevant to the prediction. Also we for column new_window only 406 out of the 19622 records ae yes. There are also many columns where the values are mostly null. These columns can be removed for the dataset. 
+
+#  Data preparation 
+```{r datapreparation}
+## remove the first 7 columns that are not relevant to prediction
+training <- training[, -c(1:7)]
+##remove fields with majority NA values 
+df <- sapply(training, function(x) sum(is.na(x)))
+training <- training[, (df<19000)]
+dim(training)
+
+##remove highy correrelated coolumns, columns that a corelation more than 0.95 are removed 
+tmp <- cor(training[,1:52])
+tmp[upper.tri(tmp)] <- 0
+diag(tmp) <- 0
+training.new <- training[, !apply(tmp,2,function(x) any(x > 0.95))]
+training.new$classe <- training[,'classe']
+
+dim(training.new)
+```
+
+The final dataset used in creating the model has 51 predictors.
+
+#Split into training and testing data set 
+```{r splitdata}
+inTrain = createDataPartition(y=training.new$classe, p = 3/4)
+train = training.new[inTrain[[1]],]
+test = training.new[-inTrain[[1]],]
+```
+
+# Creating the prediction models 
+This is a classification prediction. We choose the random forest model with  5 fold cross validation to build the predictor.
+
+```{r predictionmodel}
+## create 2 vectors x the predictors and y is the result
+x <- train[,-52]
+y <- train[, 52]
+
+
+fitControl <- trainControl(method = "cv",number = 5, allowParallel = TRUE)
+##fitrf <- train(x, y, method = "rf", data = training.new, trControl = fitControl)
+
+
+## Test the accuracy of the model with the test data
+predrf <- predict(fitrf, test)
+
+## print the confustion matrix 
+matrix2 <- confusionMatrix(predrf, test$classe)
+matrix2$table
+matrix2$overall
+
+```
+
+# Prediction accuracy 
+The Model has an accuracy of 99.3% for the test data. The out of sample error is less than 0.6%. This is a good accuracy for prediction.
+
+# Predicting from  test data 
+Use the developed model to predict the outcomes for the testing dataset 
+
+```{r}
+pred <- predict(fitrf, validation)
+data.frame(validation$problem_id, pred)
+
+```
+
+##end
+
+
+
